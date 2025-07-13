@@ -1,0 +1,1 @@
+The overall CLIP based architecture implemented in this project is shown below. The experimentation will be done with different fusion strategies and pre-trained embeddings. ![Model Architecture] (images/Flow_pipeline.png)
