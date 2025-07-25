@@ -1,0 +1,127 @@
+import os, json, pickle, csv, pathlib, torch, optuna
+import numpy as np
+from collections import Counter
+from datasets import load_dataset, Features, Value, ClassLabel
+from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
+                          TrainingArguments, Trainer, default_data_collator)
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    roc_auc_score, precision_recall_curve, auc, average_precision_score
+)
+from accelerate import Accelerator
+from torch.nn import functional as F
+
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    probs = F.softmax(torch.tensor(logits), dim=-1).numpy()[:, 1]  # P(class 1)
+    preds = (probs >= 0.3).astype(int)
+
+    prec_curve, rec_curve, _ = precision_recall_curve(labels, probs)
+    pr_auc = auc(rec_curve, prec_curve)
+
+    return {
+        "accuracy":  accuracy_score(labels, preds),
+        "precision": precision_score(labels, preds, zero_division=0),
+        "recall":    recall_score(labels, preds, zero_division=0),
+        "f1":  f1_score(labels, preds),
+        "roc_auc":   roc_auc_score(labels, probs),
+        "pr_auc":    pr_auc,
+    }
+
+def preprocess(b):
+    enc = tokzr(
+        b["text"],
+        truncation=True,
+        padding="max_length",
+        max_length=128,
+        return_attention_mask=True,
+    )
+    enc["labels"] = b["label"]  # rename to key Trainer/model expects
+    return enc
+
+# ───────────────────────── ARGUMENTS ─────────────────────────
+
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "run_logs")
+# N_TRIALS = int(os.environ.get("N_TRIALS", 25))
+# EVAL_STEPS = int(os.environ.get("EVAL_STEPS", 500))
+# pathlib.Path(OUTPUT_DIR).mkdir(exist_ok=True, parents=True)
+
+# ───────────────────────── DATA LOAD ─────────────────────────
+features = Features({
+    "id":    Value("string"),
+    "img":   Value("string"),
+    "label": ClassLabel(names=["clean", "hateful"]),
+    "text":  Value("string"),
+})
+
+raw = load_dataset(
+    "json",
+    data_files={
+        "train":      "./data/train.jsonl",
+        "validation": "./data/dev.jsonl",
+        "test":       "./data/test.jsonl",
+    },
+    features=features,
+    split=None,
+)
+
+tokzr = AutoTokenizer.from_pretrained("GroNLP/hatebert")
+
+
+
+data_train = raw["train"].map(preprocess, remove_columns=["id","img","text","label"])
+data_val = raw["validation"].map(preprocess, remove_columns=["id","img","text","label"])
+data_test = raw["test"].map(preprocess, remove_columns=["id","img","text","label"])
+
+# ─────────────── CLASS‑WEIGHT VECTOR ────────────────
+counts = Counter(raw["train"]["label"])
+total = sum(counts.values())
+weights = torch.tensor([total/counts[c] for c in range(2)], dtype=torch.float32)
+
+# ───────────────────── TRAINER ──────────────────────
+class WeightedTrainer(Trainer):
+    def __init__(self, class_weights, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.class_weights = class_weights
+
+    def compute_loss(self, model, inputs, num_items_in_batch=None, return_outputs=False):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.logits
+        loss_fn = torch.nn.CrossEntropyLoss(
+                      weight=self.class_weights.to(logits.device))
+        loss = loss_fn(logits, labels)
+
+        return (loss, outputs) if return_outputs else loss
+
+with open("./run_logs/best_params.json",'r') as f:
+    best_params = json.load(f)
+
+best_args = dict(
+    per_device_train_batch_size = best_params["batch_size"],
+    per_device_eval_batch_size  = best_params["batch_size"],
+    learning_rate  = best_params["learning_rate"],
+    weight_decay   = best_params["weight_decay"],
+    warmup_steps   = best_params["warmup_steps"],
+    num_train_epochs = best_params["epochs"],
+    fp16 = torch.cuda.is_available(),
+    output_dir = os.path.join(OUTPUT_DIR, "best-run"),
+    report_to  = "none",
+    save_total_limit = 1,
+)
+
+best_trainer = WeightedTrainer(
+    model         = AutoModelForSequenceClassification.from_pretrained("GroNLP/hatebert", num_labels=2),
+    args          = TrainingArguments(**best_args),
+    class_weights  = weights,
+    train_dataset = data_train,
+    eval_dataset  = data_test,
+    tokenizer     = tokzr,
+    data_collator = default_data_collator,
+    compute_metrics=compute_metrics,
+)
+
+best_trainer.train()
+metrics = best_trainer.evaluate()
+json.dump(metrics, open(os.path.join(OUTPUT_DIR, "test_metrics.json"), "w"), indent=2)
+best_trainer.save_model(os.path.join(OUTPUT_DIR, "best-run"))
