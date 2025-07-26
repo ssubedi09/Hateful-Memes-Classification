@@ -1,5 +1,13 @@
-The overall CLIP based architecture implemented in this project is shown below. The experimentation will be done with different fusion strategies and pre-trained embeddings.
-
- ![Model Architecture](images/Flow.png)
-
-The first model implemented is clip-vit-base-patch32. It uses a Vision Transformer (ViT) with a patch size of 32x32 as its image encoder and a Transformer-based text encoder to generate multimodal embeddings. The features were simply concatenated (fusion strategy) and passed through linear layer. Initially, only the final linear layer was trained by freezing all CLIP parameters. The model was also trained without freezing any CLIP parameters. The accuracy and loss curve are shown in notebook inside folder clip-vit-base-patch32.
+Hateful memes pose a significant challenge in content
+moderation due to their multimodal nature. The sarcasm,
+cultural context, or implicit meaning in memes frequently
+arise from the interplay between the image and the caption.
+This project explores the classification of hateful memes us-
+ing three different approaches: an image-based classifier,
+a text-based classifier, and a multimodal CLIP-based clas-
+sifier that integrates both image and text features through
+different fusion strategies—concatenation, ensemble, and
+self-attention—followed by a deep neural network classifier.
+The primary objective is to maximize the detection of hate-
+ful memes while minimizing false positives on non-hateful
+content.
