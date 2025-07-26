@@ -7,7 +7,7 @@ This project aims to build robust models for **hateful meme classification**, le
 
 > This project explores the classification of hateful memes using three different approaches:
 >
-> - **Image-based classifier**  
+> - **Image-based classifier (CA_CNN)**  
 > - **Text-based classifier (HateBERT)**  
 > - **Multimodal CLIP-based classifiers** with three fusion strategies:  
 >   - Concatenation  
