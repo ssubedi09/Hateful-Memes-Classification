@@ -4,12 +4,7 @@ Hateful memes are a subtle yet harmful form of online hate speech. Unlike tradit
 
 This project aims to build robust models for **hateful meme classification**, leveraging **image-based**, **text-based**, and **multimodal CLIP-based** approaches. Our goal is to **maximize hateful content detection** while keeping **false positives low** on non-hateful memes.
 
----
 
-## 🧠 Abstract
-
-> Hateful memes pose a significant challenge in content moderation due to their **multimodal nature**. The sarcasm, cultural context, or implicit meaning in memes frequently arise from the **interplay between the image and the caption**.  
->  
 > This project explores the classification of hateful memes using three different approaches:
 >
 > - **Image-based classifier**  
@@ -49,7 +44,6 @@ Here’s a performance comparison across our different models:
 | **EnsembleCLIP**    | 0.707    | 0.766   | **0.700** | 0.700  | 0.700    |
 | **AttentionCLIP**   | 0.646    | 0.737   | 0.589     | **0.916** | 0.717 |
 
-✅ **ConcatCLIP** achieved the best overall F1 score and AUC, while **AttentionCLIP** had the highest recall, showing its strength in catching all hateful memes.
 
 ---
 
